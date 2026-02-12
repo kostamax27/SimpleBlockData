@@ -1,8 +1,8 @@
 ---
 name: BlockData
-version: 0.0.7
+version: 1.0.0
 antigen: NhanAZ\BlockData
 api: [5.0.0]
 authors: [NhanAZ]
-description: A virion for PocketMine-MP that lets plugins store arbitrary block data
+description: A high-performance, developer-friendly virion for storing custom data on blocks
 ...

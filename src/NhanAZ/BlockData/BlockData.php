@@ -4,116 +4,192 @@ declare(strict_types=1);
 
 namespace NhanAZ\BlockData;
 
-use NhanAZ\BlockData\utils\PositionToString;
+use InvalidArgumentException;
+use JsonException;
 use pocketmine\block\Block;
 use pocketmine\plugin\PluginBase;
-use pocketmine\Server;
-use pocketmine\utils\Config;
+use pocketmine\world\World;
+use RuntimeException;
 
-class BlockData {
+/**
+ * A high-performance, developer-friendly library for storing custom data on blocks.
+ *
+ * Usage:
+ *   $blockData = BlockData::create($this);
+ *   $blockData->set($block, ["owner" => "Steve", "level" => 3]);
+ *   $data = $blockData->get($block);
+ *   $blockData->remove($block);
+ */
+final class BlockData{
 
-	private string $blockDataFolderPath;
+	/** @var array<int, BlockDataWorld> */
+	private array $worlds = [];
+
+	private function __construct(
+		private PluginBase $plugin,
+	){}
 
 	/**
-	 * @method __construct(PluginBase $plugin, bool $handleEvent = true)
+	 * Creates a new BlockData instance for your plugin.
+	 * Call this once in your plugin's onEnable() method.
 	 *
-	 * @param PluginBase $plugin The plugin instance.
-	 * @param bool $handleEvent Whether or not to handle events. If true, the item block data will be saved when the player places and the data will be written to the item when the player breaks the block. If false, vice versa.
+	 * @param PluginBase $plugin      Your plugin instance
+	 * @param bool       $autoCleanup If true, block data is automatically removed
+	 *                                when blocks are destroyed (break, explode, burn, decay)
 	 */
-	public function __construct(protected PluginBase $plugin, protected bool $handleEvent = false) {
-		$this->blockDataFolderPath = $plugin->getDataFolder() . 'BlockData/';
-		self::ensureDirectoryExists($this->blockDataFolderPath);
-		if ($handleEvent) {
-			Server::getInstance()->getPluginManager()->registerEvents(new BlockDataEventHandler($this), $plugin);
+	public static function create(PluginBase $plugin, bool $autoCleanup = false) : self{
+		if(!extension_loaded("leveldb")){
+			throw new RuntimeException(
+				"BlockData requires the LevelDB PHP extension. " .
+				"This extension is bundled with PocketMine-MP by default."
+			);
 		}
+
+		$instance = new self($plugin);
+		$server = $plugin->getServer();
+
+		$server->getPluginManager()->registerEvents(
+			new BlockDataListener($instance, $plugin, $autoCleanup),
+			$plugin
+		);
+
+		foreach($server->getWorldManager()->getWorlds() as $world){
+			$instance->loadWorld($world);
+		}
+
+		return $instance;
 	}
 
 	/**
-	 * Ensures that the specified directory exists.
+	 * Stores data for a block.
+	 * Accepts any JSON-serializable value: string, int, float, bool, or array.
 	 *
-	 * If the directory does not exist, it will be created.
+	 * @param Block $block The block to store data for
+	 * @param mixed $data  The data to store (must be JSON-serializable, cannot be null)
 	 *
-	 * @param string $directory The path to the directory to ensure.
+	 * @throws InvalidArgumentException if $data is null or not JSON-serializable
 	 */
-	private function ensureDirectoryExists(string $directory): void {
-		if (!file_exists($directory)) {
-			@mkdir($directory, 0777, true);
-		}
+	public function set(Block $block, mixed $data) : void{
+		$pos = $block->getPosition();
+		$this->setAt($pos->getWorld(), $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ(), $data);
 	}
 
 	/**
-	 * Gets the path to the block data folder.
+	 * Gets the data stored for a block.
 	 *
-	 * @return string The path to the block data folder.
+	 * @return mixed The stored data, or null if no data exists
 	 */
-	private function getBlockDataPath(): string {
-		return $this->blockDataFolderPath;
+	public function get(Block $block) : mixed{
+		$pos = $block->getPosition();
+		return $this->getAt($pos->getWorld(), $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
 	}
 
 	/**
-	 * Sets the data for the specified block.
-	 *
-	 * @param Block $block The block to set the data for.
-	 * @param string $data The data to set for the block.
+	 * Checks if a block has data stored.
 	 */
-	public function setData(Block $block, string $data): void {
-		$position = $block->getPosition();
-		$positionString = PositionToString::parse($position);
-
-		$world = $position->getWorld();
-		$worldName = $world->getFolderName();
-		$worldNamePath = self::getBlockDataPath() . $worldName . "/";
-		self::ensureDirectoryExists($worldNamePath);
-
-		$this->plugin->saveResource($worldNamePath . $positionString);
-
-		$config = new Config($worldNamePath . $positionString . ".yml", Config::YAML);
-		$config->set($positionString, $data);
-		$config->save();
+	public function has(Block $block) : bool{
+		return $this->get($block) !== null;
 	}
 
 	/**
-	 * Removes the data for the specified block.
-	 *
-	 * @param Block $block The block to remove the data for.
+	 * Removes the data stored for a block.
 	 */
-	public function removeData(Block $block): void {
-		$position = $block->getPosition();
-		$positionString = PositionToString::parse($position);
-
-		$world = $position->getWorld();
-		$worldName = $world->getFolderName();
-		$worldNamePath = self::getBlockDataPath() . $worldName . "/";
-		$positionPath = $worldNamePath . $positionString . ".yml";
-		if (is_file($positionPath)) {
-			@unlink($positionPath);
-		}
+	public function remove(Block $block) : void{
+		$pos = $block->getPosition();
+		$this->removeAt($pos->getWorld(), $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
 	}
 
 	/**
-	 * Gets the data for the specified block.
+	 * Stores data at specific world coordinates.
 	 *
-	 * @param Block $block The block to get the data for.
-	 *
-	 * @return string|null The data for the block, or null if the block does not have any data.
+	 * @throws InvalidArgumentException if $data is null or not JSON-serializable
 	 */
-	public function getData(Block $block): ?string {
-		$position = $block->getPosition();
-		$positionString = PositionToString::parse($position);
-
-		$world = $position->getWorld();
-		$worldName = $world->getFolderName();
-		$worldNamePath = self::getBlockDataPath() . $worldName . "/";
-		$positionPath = $worldNamePath . $positionString . ".yml";
-		if (!is_file($positionPath)) {
-			return null;
+	public function setAt(World $world, int $x, int $y, int $z, mixed $data) : void{
+		if($data === null){
+			throw new InvalidArgumentException("Data cannot be null. Use remove() or removeAt() to delete block data.");
 		}
-		$config = new Config($positionPath, Config::YAML);
-
-		$return = $config->get($positionString);
-		if (!is_string($return)) {
-			throw new \TypeError();
+		try{
+			json_encode($data, JSON_THROW_ON_ERROR);
+		}catch(JsonException $e){
+			throw new InvalidArgumentException("Data must be JSON-serializable: " . $e->getMessage(), 0, $e);
 		}
-		return $return;
+		$this->getWorld($world)->set($x, $y, $z, $data);
+	}
+
+	/**
+	 * Gets data at specific world coordinates.
+	 *
+	 * @return mixed The stored data, or null if no data exists
+	 */
+	public function getAt(World $world, int $x, int $y, int $z) : mixed{
+		return $this->getWorld($world)->get($x, $y, $z);
+	}
+
+	/**
+	 * Checks if data exists at specific world coordinates.
+	 */
+	public function hasAt(World $world, int $x, int $y, int $z) : bool{
+		return $this->getAt($world, $x, $y, $z) !== null;
+	}
+
+	/**
+	 * Removes data at specific world coordinates.
+	 */
+	public function removeAt(World $world, int $x, int $y, int $z) : void{
+		$this->getWorld($world)->remove($x, $y, $z);
+	}
+
+	// ── Internal methods (used by BlockDataListener) ──────────────────
+
+	/** @internal */
+	public function loadWorld(World $world) : void{
+		if(!isset($this->worlds[$world->getId()])){
+			$this->worlds[$world->getId()] = new BlockDataWorld($this->plugin, $world);
+		}
+	}
+
+	/** @internal */
+	public function unloadWorld(World $world) : void{
+		$id = $world->getId();
+		if(isset($this->worlds[$id])){
+			$this->worlds[$id]->close();
+			unset($this->worlds[$id]);
+		}
+	}
+
+	/** @internal */
+	public function saveWorld(World $world) : void{
+		$id = $world->getId();
+		if(isset($this->worlds[$id])){
+			$this->worlds[$id]->save();
+		}
+	}
+
+	/** @internal */
+	public function onChunkLoad(World $world, int $chunkX, int $chunkZ) : void{
+		if(isset($this->worlds[$world->getId()])){
+			$this->worlds[$world->getId()]->loadChunk($chunkX, $chunkZ);
+		}
+	}
+
+	/** @internal */
+	public function onChunkUnload(World $world, int $chunkX, int $chunkZ) : void{
+		$id = $world->getId();
+		if(isset($this->worlds[$id])){
+			$this->worlds[$id]->unloadChunk($chunkX, $chunkZ);
+		}
+	}
+
+	/** @internal */
+	public function closeAll() : void{
+		foreach($this->worlds as $id => $world){
+			$world->close();
+			unset($this->worlds[$id]);
+		}
+	}
+
+	private function getWorld(World $world) : BlockDataWorld{
+		return $this->worlds[$world->getId()]
+			?? throw new RuntimeException("World '{$world->getFolderName()}' is not loaded in BlockData");
 	}
 }

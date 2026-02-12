@@ -1,13 +1,11 @@
 {
     "name": "nhanaz/blockdata",
     "type": "library",
-    "description": "A virion for PocketMine-MP that lets plugins store arbitrary block data",
+    "description": "A high-performance, developer-friendly virion for storing custom data on blocks",
     "license": "LGPL-3.0-or-later",
     "require": {
+        "php": "^8.1",
         "pocketmine/pocketmine-mp": "^5.0.0"
-    },
-    "require-dev": {
-        "phpstan/phpstan": "^1.8.9"
     },
     "autoload": {
         "classmap": ["src"]
