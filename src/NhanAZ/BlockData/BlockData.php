@@ -34,10 +34,11 @@ final class BlockData{
 	 * Creates a new BlockData instance for your plugin.
 	 * Call this once in your plugin's onEnable() method.
 	 *
-	 * @param PluginBase $plugin      Your plugin instance
-	 * @param bool       $autoCleanup If true, block data is automatically removed
-	 *                                when blocks are destroyed (break, explode, burn, decay)
-	 * @param string|null $dataPath Custom storage path (optional)
+	 * @param PluginBase  $plugin      Your plugin instance
+	 * @param bool        $autoCleanup If true, block data is automatically removed
+	 *                                 when blocks are destroyed (break, explode, burn, decay)
+	 * @param string|null $dataPath    Base directory for storing per-world LevelDB databases.
+	 *                                 If null, defaults to "<plugin data folder>/blockdata".
 	 *
 	 * @throws \RuntimeException If LevelDB extension is missing
 	 *                            or data directory cannot be created
