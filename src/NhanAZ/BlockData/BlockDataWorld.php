@@ -45,11 +45,8 @@ final class BlockDataWorld{
 	public function __construct(string $dataPath, private World $world){
 		$worldPath = Path::join($dataPath, $this->world->getFolderName());
 
-		if(!is_dir($worldPath)){
-			@mkdir($worldPath, 0777, true);
-		}
-		
-		if(!mkdir($worldPath, 0777, true) && !is_dir($worldPath)){
+		// Race-safe: try create only when missing; ignore "exists" warnings, and re-check before failing
+		if(!is_dir($worldPath) && !@mkdir($worldPath, 0777, true) && !is_dir($worldPath)){
 			throw new \RuntimeException("Directory \"$worldPath\" was not created");
 		}
 
