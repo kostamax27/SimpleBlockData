@@ -2,16 +2,16 @@
 
 A high-performance, developer-friendly virion for storing custom data on blocks in PocketMine-MP.
 
-**Store any data on any block** — strings, numbers, arrays — with just 3 methods: `set()`, `get()`, `remove()`.
+**Store any data on any block** - strings, numbers, arrays - with just 3 methods: `set()`, `get()`, `remove()`.
 
 ## Features
 
-- **Simple API** — No custom classes, no type registration, no boilerplate
-- **High Performance** — LevelDB backend with Snappy compression and in-memory caching
-- **Store Anything** — Any JSON-serializable value (string, int, float, bool, array)
-- **Auto Cleanup** — Optionally auto-remove data when blocks are destroyed
-- **Chunk-Aware** — Cache eviction follows chunk lifecycle to prevent memory leaks
-- **Multi-Plugin Safe** — Each plugin gets its own isolated LevelDB database
+- **Simple API** - No custom classes, no type registration, no boilerplate
+- **High Performance** - LevelDB backend with Snappy compression and in-memory caching
+- **Store Anything** - Any JSON-serializable value (string, int, float, bool, array)
+- **Auto Cleanup** - Optionally auto-remove data when blocks are destroyed
+- **Chunk-Aware** - Cache eviction follows chunk lifecycle to prevent memory leaks
+- **Multi-Plugin Safe** - Each plugin gets its own isolated LevelDB database
 
 ## Installation
 
@@ -20,7 +20,7 @@ A high-performance, developer-friendly virion for storing custom data on blocks 
 composer require nhanaz/blockdata
 ```
 
-**Poggit Virion** — add to your `.poggit.yml`:
+**Poggit Virion** - add to your `.poggit.yml`:
 ```yaml
 libs:
   - src: NhanAZ-Libraries/BlockData/BlockData
@@ -38,7 +38,7 @@ class MyPlugin extends PluginBase {
     private BlockData $blockData;
 
     protected function onEnable(): void {
-        // One-line setup — that's it!
+        // One-line setup - that's it!
         $this->blockData = BlockData::create($this);
     }
 }
@@ -109,6 +109,10 @@ When enabled, block data is automatically removed on:
 - **Leaves** decay naturally (`LeavesDecayEvent`)
 
 If you need custom logic (e.g. transfer data to drops), use `autoCleanup: false` and handle events yourself.
+
+> **Note:** Auto cleanup is *event-based* and only listens to common PocketMine events.  
+> If other plugins modify or remove blocks in custom ways without firing these events, BlockData cannot automatically detect those changes. In that case, you should manually remove or update block data in your own code.  
+> See [Issue #8 – Event-Based Block Tracking Issues](https://github.com/NhanAZ-Libraries/BlockData/issues/8) for discussion and rationale.
 
 ## Custom Data Path
 
